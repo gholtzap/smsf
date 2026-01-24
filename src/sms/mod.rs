@@ -3,6 +3,7 @@ pub mod delivery;
 pub mod encoding;
 pub mod reassembly;
 pub mod retry;
+pub mod status_report;
 pub mod tpdu;
 pub mod types;
 pub mod udh;

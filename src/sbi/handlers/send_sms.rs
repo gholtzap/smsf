@@ -3,6 +3,7 @@ use crate::db::Database;
 use crate::nf_client::udm::UdmClient;
 use crate::sbi::models::{ProblemDetails, SmsRecordData};
 use crate::sbi::multipart::parse_multipart_sms;
+use crate::sms::tpdu::TpSubmit;
 use crate::sms::types::{SmsDeliveryStatus, SmsRecord};
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -119,6 +120,19 @@ pub async fn send_uplink_sms(
 
     let sms_record_id = uuid::Uuid::new_v4().to_string();
 
+    let (status_report_requested, message_reference, destination_address) =
+        match TpSubmit::decode(&sms_payload) {
+            Ok(tp_submit) => (
+                tp_submit.status_report_request,
+                Some(tp_submit.message_reference),
+                Some(tp_submit.destination_address),
+            ),
+            Err(e) => {
+                error!("Failed to decode TP-SUBMIT: {}", e);
+                (false, None, None)
+            }
+        };
+
     let context = state.context_store.get(&supi).unwrap();
     let now = Utc::now();
     let sms_record = SmsRecord {
@@ -133,6 +147,10 @@ pub async fn send_uplink_sms(
         expires_at: now + Duration::days(1),
         created_at: now,
         updated_at: now,
+        status_report_requested,
+        originator_address: context.gpsi.clone().or(destination_address),
+        message_reference,
+        is_mobile_originated: true,
     };
 
     if let Err(e) = state.db.save_sms_record(&sms_record).await {

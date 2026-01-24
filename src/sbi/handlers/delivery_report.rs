@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::sbi::models::{ProblemDetails, SmsDeliveryReportData};
+use crate::sms::status_report::StatusReportService;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -9,6 +10,7 @@ use tracing::{error, info};
 
 pub struct AppState {
     pub db: Database,
+    pub status_report_service: Arc<StatusReportService>,
 }
 
 pub async fn receive_delivery_report(
@@ -45,7 +47,7 @@ pub async fn receive_delivery_report(
 
     if let Err(e) = state
         .db
-        .update_sms_status(&report.sms_record_id, report.delivery_status)
+        .update_sms_status(&report.sms_record_id, delivery_status.clone())
         .await
     {
         error!("Failed to update SMS delivery status: {}", e);
@@ -57,6 +59,14 @@ pub async fn receive_delivery_report(
             ))),
         )
             .into_response();
+    }
+
+    if let Err(e) = state
+        .status_report_service
+        .handle_delivery_status_change(&report.sms_record_id, delivery_status.clone())
+        .await
+    {
+        error!("Failed to send status report: {}", e);
     }
 
     info!(

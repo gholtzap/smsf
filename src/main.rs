@@ -15,6 +15,7 @@ use crate::nf_client::udm::UdmClient;
 use crate::sbi::server::{create_router, AppState};
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::retry::SmsRetryService;
+use crate::sms::status_report::StatusReportService;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -71,6 +72,11 @@ async fn main() -> Result<()> {
         config.retry.default_validity_period_secs,
     ));
 
+    let status_report_service = Arc::new(StatusReportService::new(
+        db.clone(),
+        delivery_service.clone(),
+    ));
+
     let retry_service = Arc::new(SmsRetryService::new(
         db.clone(),
         delivery_service.clone(),
@@ -88,6 +94,7 @@ async fn main() -> Result<()> {
         amf_client,
         udm_client,
         delivery_service,
+        status_report_service,
     });
 
     let app = create_router(app_state);

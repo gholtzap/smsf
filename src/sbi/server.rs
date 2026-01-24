@@ -4,6 +4,7 @@ use crate::nf_client::amf::AmfClient;
 use crate::nf_client::udm::UdmClient;
 use crate::sbi::handlers::{activation, deactivation, delivery_report, send_mt_sms, send_sms, update};
 use crate::sms::delivery::SmsDeliveryService;
+use crate::sms::status_report::StatusReportService;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{delete, patch, post, put};
@@ -17,6 +18,7 @@ pub struct AppState {
     pub amf_client: AmfClient,
     pub udm_client: UdmClient,
     pub delivery_service: Arc<SmsDeliveryService>,
+    pub status_report_service: Arc<StatusReportService>,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -52,6 +54,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
     let delivery_report_state = Arc::new(delivery_report::AppState {
         db: state.db.clone(),
+        status_report_service: state.status_report_service.clone(),
     });
 
     Router::new()

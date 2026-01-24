@@ -61,6 +61,10 @@ impl SmsDeliveryService {
             expires_at,
             created_at: now,
             updated_at: now,
+            status_report_requested: false,
+            originator_address: None,
+            message_reference: None,
+            is_mobile_originated: false,
         };
 
         self.db.save_sms_record(&sms_record).await?;

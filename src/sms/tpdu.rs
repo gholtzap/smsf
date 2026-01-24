@@ -49,6 +49,75 @@ pub struct TpStatusReport {
     pub parameter_indicator: u8,
 }
 
+impl TpStatusReport {
+    pub fn new(message_reference: u8, recipient: String, status: u8) -> Self {
+        let now = Utc::now();
+        Self {
+            message_reference,
+            recipient_address: recipient,
+            timestamp: now,
+            discharge_time: now,
+            status,
+            parameter_indicator: 0,
+        }
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut pdu = Vec::new();
+
+        let mti_flags = 0x02u8;
+        pdu.push(mti_flags);
+
+        pdu.push(self.message_reference);
+
+        let recip_addr = encode_address(&self.recipient_address);
+        pdu.extend_from_slice(&recip_addr);
+
+        let scts = encode_timestamp(&self.timestamp);
+        pdu.extend_from_slice(&scts);
+
+        let dt = encode_timestamp(&self.discharge_time);
+        pdu.extend_from_slice(&dt);
+
+        pdu.push(self.status);
+
+        pdu.push(self.parameter_indicator);
+
+        pdu
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        if data.len() < 23 {
+            return Err(anyhow!("TP-STATUS-REPORT PDU too short"));
+        }
+
+        let message_reference = data[1];
+
+        let (recipient_address, addr_len) = decode_address(&data[2..])?;
+        let mut pos = 2 + addr_len;
+
+        let timestamp = decode_timestamp(&data[pos..pos + 7])?;
+        pos += 7;
+
+        let discharge_time = decode_timestamp(&data[pos..pos + 7])?;
+        pos += 7;
+
+        let status = data[pos];
+        pos += 1;
+
+        let parameter_indicator = data[pos];
+
+        Ok(Self {
+            message_reference,
+            recipient_address,
+            timestamp,
+            discharge_time,
+            status,
+            parameter_indicator,
+        })
+    }
+}
+
 impl TpSubmit {
     pub fn new(destination: String, text: String) -> Self {
         let dcs = super::encoding::auto_detect_encoding(&text);
