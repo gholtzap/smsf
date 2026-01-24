@@ -1,8 +1,10 @@
 pub mod concatenation;
+pub mod cp;
 pub mod delivery;
 pub mod encoding;
 pub mod reassembly;
 pub mod retry;
+pub mod rp;
 pub mod status_report;
 pub mod tpdu;
 pub mod types;

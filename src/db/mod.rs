@@ -144,4 +144,16 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("Failed to mark as expired: {}", e))?;
         Ok(())
     }
+
+    pub async fn load_all_ue_contexts(&self) -> Result<Vec<UeSmsContext>> {
+        use futures_util::TryStreamExt;
+
+        let cursor = self.ue_contexts
+            .find(doc! {})
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to query UE contexts: {}", e))?;
+
+        cursor.try_collect::<Vec<UeSmsContext>>().await
+            .map_err(|e| anyhow::anyhow!("Failed to collect UE contexts: {}", e))
+    }
 }

@@ -46,6 +46,17 @@ async fn main() -> Result<()> {
     info!("Database connected");
 
     let context_store = UeSmsContextStore::new();
+
+    match db.load_all_ue_contexts().await {
+        Ok(contexts) => {
+            let count = contexts.len();
+            context_store.load_contexts(contexts);
+            info!("Restored {} UE SMS contexts from database", count);
+        }
+        Err(e) => {
+            error!("Failed to load UE contexts from database: {}", e);
+        }
+    }
     let udm_client = UdmClient::new(config.udm_uri.clone());
 
     let nrf_client = Arc::new(NrfClient::new(

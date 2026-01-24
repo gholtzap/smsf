@@ -98,4 +98,15 @@ impl UeSmsContextStore {
     pub fn contains(&self, supi: &str) -> bool {
         self.store.contains_key(supi)
     }
+
+    pub fn load_contexts(&self, contexts: Vec<UeSmsContext>) {
+        for context in contexts {
+            let supi = context.supi.clone();
+            self.store.insert(supi, context);
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.store.len()
+    }
 }
