@@ -1,0 +1,6 @@
+.env
+.CLAUDE
+.claude/
+target/
+config.json
+Cargo.lock

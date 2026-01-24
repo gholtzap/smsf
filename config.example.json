@@ -1,0 +1,24 @@
+{
+  "sbi_bind_addr": "0.0.0.0",
+  "sbi_bind_port": 8085,
+  "mongodb_uri": "mongodb://localhost:27017",
+  "nrf_uri": "http://127.0.0.1:8081",
+  "nf_instance_id": "auto-generated-if-not-set",
+  "smsf_host": "127.0.0.1",
+  "oauth2": {
+    "enabled": false,
+    "issuer": "",
+    "audience": [],
+    "required_scope": null,
+    "secret_key": ""
+  },
+  "tls": {
+    "enabled": false,
+    "cert_path": null,
+    "key_path": null,
+    "client_cert_path": null,
+    "client_key_path": null,
+    "client_ca_path": null,
+    "require_client_cert": false
+  }
+}
