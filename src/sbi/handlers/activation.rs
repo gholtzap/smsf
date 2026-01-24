@@ -1,16 +1,18 @@
 use crate::context::ue_sms_context::{UeSmsContext, UeSmsContextStore};
 use crate::db::Database;
+use crate::nf_client::udm::UdmClient;
 use crate::sbi::models::{ProblemDetails, UeSmsContextData};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info, warn};
 
 pub struct AppState {
     pub context_store: UeSmsContextStore,
     pub db: Database,
+    pub udm_client: UdmClient,
 }
 
 pub async fn activate_sms_service(
@@ -36,6 +38,50 @@ pub async fn activate_sms_service(
             )),
         )
             .into_response();
+    }
+
+    match state.udm_client.get_sms_authorization(&supi).await {
+        Ok(auth_data) => {
+            if !auth_data.sms_subscribed {
+                warn!("SMS activation rejected for SUPI {}: not subscribed", supi);
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ProblemDetails::new(
+                        403,
+                        "SMS service is not subscribed for this user".to_string(),
+                    )),
+                )
+                    .into_response();
+            }
+
+            if !auth_data.mo_sms_allowed && !auth_data.mt_sms_allowed {
+                warn!("SMS activation rejected for SUPI {}: MO and MT SMS both barred", supi);
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ProblemDetails::new(
+                        403,
+                        "SMS service is barred for this user".to_string(),
+                    )),
+                )
+                    .into_response();
+            }
+
+            info!(
+                "SMS authorization validated for SUPI {}: MSISDN={:?}, MO={}, MT={}",
+                supi, auth_data.msisdn, auth_data.mo_sms_allowed, auth_data.mt_sms_allowed
+            );
+        }
+        Err(e) => {
+            error!("Failed to get SMS authorization from UDM: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ProblemDetails::internal_error(format!(
+                    "Failed to validate SMS subscription: {}",
+                    e
+                ))),
+            )
+                .into_response();
+        }
     }
 
     let context = UeSmsContext::from_data(context_data);

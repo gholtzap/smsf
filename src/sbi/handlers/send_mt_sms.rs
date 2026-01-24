@@ -1,6 +1,7 @@
 use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
+use crate::nf_client::udm::UdmClient;
 use crate::sbi::models::{ProblemDetails, SmsRecordDeliveryData};
 use crate::sbi::multipart::parse_multipart_sms;
 use crate::sms::delivery::SmsDeliveryService;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub context_store: UeSmsContextStore,
     pub db: Database,
     pub amf_client: AmfClient,
+    pub udm_client: UdmClient,
     pub delivery_service: Arc<SmsDeliveryService>,
 }
 
@@ -34,6 +36,32 @@ pub async fn send_downlink_sms(
             )),
         )
             .into_response();
+    }
+
+    match state.udm_client.get_sms_authorization(&supi).await {
+        Ok(auth_data) => {
+            if !auth_data.mt_sms_allowed {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(ProblemDetails::new(
+                        403,
+                        "MT-SMS is not allowed for this subscriber".to_string(),
+                    )),
+                )
+                    .into_response();
+            }
+        }
+        Err(e) => {
+            error!("Failed to get SMS authorization from UDM: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ProblemDetails::internal_error(format!(
+                    "Failed to check SMS authorization: {}",
+                    e
+                ))),
+            )
+                .into_response();
+        }
     }
 
     let content_type = match headers.get(axum::http::header::CONTENT_TYPE) {

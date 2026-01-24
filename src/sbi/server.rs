@@ -1,6 +1,7 @@
 use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
+use crate::nf_client::udm::UdmClient;
 use crate::sbi::handlers::{activation, deactivation, delivery_report, send_mt_sms, send_sms, update};
 use crate::sms::delivery::SmsDeliveryService;
 use axum::http::StatusCode;
@@ -14,6 +15,7 @@ pub struct AppState {
     pub context_store: UeSmsContextStore,
     pub db: Database,
     pub amf_client: AmfClient,
+    pub udm_client: UdmClient,
     pub delivery_service: Arc<SmsDeliveryService>,
 }
 
@@ -21,6 +23,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let activation_state = Arc::new(activation::AppState {
         context_store: state.context_store.clone(),
         db: state.db.clone(),
+        udm_client: state.udm_client.clone(),
     });
 
     let deactivation_state = Arc::new(deactivation::AppState {
@@ -36,12 +39,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let send_sms_state = Arc::new(send_sms::AppState {
         context_store: state.context_store.clone(),
         db: state.db.clone(),
+        udm_client: state.udm_client.clone(),
     });
 
     let send_mt_sms_state = Arc::new(send_mt_sms::AppState {
         context_store: state.context_store.clone(),
         db: state.db.clone(),
         amf_client: state.amf_client.clone(),
+        udm_client: state.udm_client.clone(),
         delivery_service: state.delivery_service.clone(),
     });
 

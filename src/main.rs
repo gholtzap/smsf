@@ -11,6 +11,7 @@ use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
 use crate::nf_client::nrf::NrfClient;
+use crate::nf_client::udm::UdmClient;
 use crate::sbi::server::{create_router, AppState};
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::retry::SmsRetryService;
@@ -45,6 +46,7 @@ async fn main() -> Result<()> {
 
     let context_store = UeSmsContextStore::new();
     let amf_client = AmfClient::new();
+    let udm_client = UdmClient::new(config.udm_uri.clone());
 
     let nrf_client = Arc::new(NrfClient::new(
         config.nrf_uri.clone(),
@@ -83,6 +85,7 @@ async fn main() -> Result<()> {
         context_store,
         db,
         amf_client,
+        udm_client,
         delivery_service,
     });
 

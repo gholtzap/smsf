@@ -49,6 +49,7 @@ pub struct Config {
     pub sbi_bind_port: u16,
     pub mongodb_uri: String,
     pub nrf_uri: String,
+    pub udm_uri: String,
     pub nf_instance_id: String,
     pub smsf_host: String,
     pub oauth2: OAuth2Config,
@@ -103,6 +104,9 @@ impl Config {
 
         let nrf_uri = env::var("NRF_URI")
             .unwrap_or_else(|_| "http://127.0.0.1:8081".to_string());
+
+        let udm_uri = env::var("UDM_URI")
+            .unwrap_or_else(|_| "http://127.0.0.1:8083".to_string());
 
         let nf_instance_id = env::var("NF_INSTANCE_ID")
             .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
@@ -170,6 +174,7 @@ impl Config {
             sbi_bind_port,
             mongodb_uri,
             nrf_uri,
+            udm_uri,
             nf_instance_id,
             smsf_host,
             oauth2,
@@ -192,6 +197,9 @@ impl Config {
         }
         if let Ok(val) = env::var("NRF_URI") {
             self.nrf_uri = val;
+        }
+        if let Ok(val) = env::var("UDM_URI") {
+            self.udm_uri = val;
         }
         if let Ok(val) = env::var("NF_INSTANCE_ID") {
             self.nf_instance_id = val;
