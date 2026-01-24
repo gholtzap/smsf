@@ -79,6 +79,21 @@ impl Database {
         Ok(())
     }
 
+    pub async fn update_sms_status_with_reason(&self, sms_record_id: &str, status: SmsDeliveryStatus, reason: Option<String>) -> Result<()> {
+        self.sms_records
+            .update_one(
+                doc! { "sms_record_id": sms_record_id },
+                doc! { "$set": {
+                    "delivery_status": mongodb::bson::to_bson(&status)?,
+                    "failure_reason": reason,
+                    "updated_at": mongodb::bson::DateTime::now()
+                }},
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update SMS status with reason: {}", e))?;
+        Ok(())
+    }
+
     pub async fn get_sms_record(&self, sms_record_id: &str) -> Result<Option<SmsRecord>> {
         self.sms_records
             .find_one(doc! { "sms_record_id": sms_record_id })
@@ -95,7 +110,9 @@ impl Database {
             .find(doc! {
                 "$or": [
                     { "delivery_status": "PENDING" },
-                    { "delivery_status": "FAILED" }
+                    { "delivery_status": "FAILED" },
+                    { "delivery_status": "UE_NOT_REACHABLE" },
+                    { "delivery_status": "NETWORK_FAILURE" }
                 ],
                 "expires_at": { "$gt": now },
                 "$or": [
@@ -132,17 +149,11 @@ impl Database {
     }
 
     pub async fn mark_expired(&self, sms_record_id: &str) -> Result<()> {
-        self.sms_records
-            .update_one(
-                doc! { "sms_record_id": sms_record_id },
-                doc! { "$set": {
-                    "delivery_status": "FAILED",
-                    "updated_at": mongodb::bson::DateTime::now()
-                }},
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to mark as expired: {}", e))?;
-        Ok(())
+        self.update_sms_status_with_reason(
+            sms_record_id,
+            SmsDeliveryStatus::Expired,
+            Some("Message validity period exceeded".to_string())
+        ).await
     }
 
     pub async fn load_all_ue_contexts(&self) -> Result<Vec<UeSmsContext>> {

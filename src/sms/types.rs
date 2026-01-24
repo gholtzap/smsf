@@ -5,9 +5,13 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SmsDeliveryStatus {
     Pending,
-    Accepted,
-    Completed,
+    AcceptedByNetwork,
+    DeliveredToUe,
     Failed,
+    Expired,
+    MemoryCapacityExceeded,
+    UeNotReachable,
+    NetworkFailure,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +31,7 @@ pub struct SmsRecord {
     pub originator_address: Option<String>,
     pub message_reference: Option<u8>,
     pub is_mobile_originated: bool,
+    pub failure_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -65,6 +65,7 @@ impl SmsDeliveryService {
             originator_address: None,
             message_reference: None,
             is_mobile_originated: false,
+            failure_reason: None,
         };
 
         self.db.save_sms_record(&sms_record).await?;
@@ -72,11 +73,13 @@ impl SmsDeliveryService {
         match self.attempt_delivery(&sms_record).await {
             Ok(_) => {
                 info!("MT SMS delivered to AMF for SUPI: {}", supi);
-                self.update_delivery_status(&sms_record_id, SmsDeliveryStatus::Accepted).await?;
+                self.update_delivery_status(&sms_record_id, SmsDeliveryStatus::AcceptedByNetwork).await?;
                 Ok(sms_record_id)
             }
             Err(e) => {
                 warn!("Failed to deliver MT SMS to AMF, will retry: {}", e);
+                let status = self.classify_delivery_error(&e);
+                self.update_delivery_status_with_reason(&sms_record_id, status, Some(e.to_string())).await?;
                 Ok(sms_record_id)
             }
         }
@@ -89,6 +92,7 @@ impl SmsDeliveryService {
             }
             Ok(false) => {
                 warn!("UE is not reachable (CM-IDLE state), delivery will be queued");
+                return Err(anyhow::anyhow!("UE not reachable"));
             }
             Err(e) => {
                 warn!("Failed to check UE reachability: {}, continuing with delivery attempt", e);
@@ -100,7 +104,25 @@ impl SmsDeliveryService {
             .await
     }
 
+    fn classify_delivery_error(&self, error: &anyhow::Error) -> SmsDeliveryStatus {
+        let error_str = error.to_string().to_lowercase();
+
+        if error_str.contains("not reachable") || error_str.contains("cm-idle") {
+            SmsDeliveryStatus::UeNotReachable
+        } else if error_str.contains("memory") || error_str.contains("capacity") {
+            SmsDeliveryStatus::MemoryCapacityExceeded
+        } else if error_str.contains("network") || error_str.contains("connection") || error_str.contains("timeout") {
+            SmsDeliveryStatus::NetworkFailure
+        } else {
+            SmsDeliveryStatus::Failed
+        }
+    }
+
     async fn update_delivery_status(&self, sms_record_id: &str, status: SmsDeliveryStatus) -> Result<()> {
         self.db.update_sms_status(sms_record_id, status).await
+    }
+
+    async fn update_delivery_status_with_reason(&self, sms_record_id: &str, status: SmsDeliveryStatus, reason: Option<String>) -> Result<()> {
+        self.db.update_sms_status_with_reason(sms_record_id, status, reason).await
     }
 }

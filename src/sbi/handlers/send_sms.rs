@@ -143,7 +143,7 @@ pub async fn send_uplink_sms(
     let sms_record = SmsRecord {
         sms_record_id: sms_record_id.clone(),
         sms_payload: sms_payload.clone(),
-        delivery_status: SmsDeliveryStatus::Accepted,
+        delivery_status: SmsDeliveryStatus::AcceptedByNetwork,
         gpsi: context.gpsi.clone(),
         supi: supi.clone(),
         amf_id: context.amf_id.clone(),
@@ -156,6 +156,7 @@ pub async fn send_uplink_sms(
         originator_address: context.gpsi.clone().or(destination_address),
         message_reference,
         is_mobile_originated: true,
+        failure_reason: None,
     };
 
     if let Err(e) = state.db.save_sms_record(&sms_record).await {

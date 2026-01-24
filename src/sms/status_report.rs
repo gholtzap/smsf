@@ -47,10 +47,14 @@ impl StatusReportService {
         };
 
         let status = match sms_record.delivery_status {
-            SmsDeliveryStatus::Completed => 0x00,
-            SmsDeliveryStatus::Failed => 0x41,
+            SmsDeliveryStatus::DeliveredToUe => 0x00,
+            SmsDeliveryStatus::AcceptedByNetwork => 0x00,
             SmsDeliveryStatus::Pending => 0x20,
-            SmsDeliveryStatus::Accepted => 0x00,
+            SmsDeliveryStatus::UeNotReachable => 0x21,
+            SmsDeliveryStatus::NetworkFailure => 0x22,
+            SmsDeliveryStatus::Failed => 0x41,
+            SmsDeliveryStatus::Expired => 0x43,
+            SmsDeliveryStatus::MemoryCapacityExceeded => 0x45,
         };
 
         let recipient = match &sms_record.gpsi {
@@ -112,7 +116,10 @@ impl StatusReportService {
     ) -> Result<()> {
         if !matches!(
             new_status,
-            SmsDeliveryStatus::Completed | SmsDeliveryStatus::Failed
+            SmsDeliveryStatus::DeliveredToUe
+            | SmsDeliveryStatus::Failed
+            | SmsDeliveryStatus::Expired
+            | SmsDeliveryStatus::MemoryCapacityExceeded
         ) {
             return Ok(());
         }

@@ -65,22 +65,46 @@ impl SmsRetryService {
                         "SMS {} successfully delivered on retry attempt {}",
                         sms_record.sms_record_id, sms_record.retry_count + 1
                     );
-                    self.db.update_sms_status(&sms_record.sms_record_id, SmsDeliveryStatus::Accepted).await?;
+                    self.db.update_sms_status(&sms_record.sms_record_id, SmsDeliveryStatus::AcceptedByNetwork).await?;
                 }
                 Err(e) => {
-                    let backoff = self.calculate_backoff(sms_record.retry_count);
-                    let next_retry_at = Utc::now() + Duration::seconds(backoff as i64);
+                    let error_str = e.to_string().to_lowercase();
+                    let should_retry = !error_str.contains("memory") && !error_str.contains("capacity");
 
-                    warn!(
-                        "SMS {} delivery failed (attempt {}), will retry in {}s: {}",
-                        sms_record.sms_record_id,
-                        sms_record.retry_count + 1,
-                        backoff,
-                        e
-                    );
+                    if should_retry {
+                        let backoff = self.calculate_backoff(sms_record.retry_count);
+                        let next_retry_at = Utc::now() + Duration::seconds(backoff as i64);
 
-                    self.db.increment_retry_count(&sms_record.sms_record_id, Some(next_retry_at)).await?;
-                    self.db.update_sms_status(&sms_record.sms_record_id, SmsDeliveryStatus::Pending).await?;
+                        warn!(
+                            "SMS {} delivery failed (attempt {}), will retry in {}s: {}",
+                            sms_record.sms_record_id,
+                            sms_record.retry_count + 1,
+                            backoff,
+                            e
+                        );
+
+                        self.db.increment_retry_count(&sms_record.sms_record_id, Some(next_retry_at)).await?;
+
+                        let status = if error_str.contains("not reachable") || error_str.contains("cm-idle") {
+                            SmsDeliveryStatus::UeNotReachable
+                        } else if error_str.contains("network") || error_str.contains("connection") || error_str.contains("timeout") {
+                            SmsDeliveryStatus::NetworkFailure
+                        } else {
+                            SmsDeliveryStatus::Pending
+                        };
+
+                        self.db.update_sms_status_with_reason(&sms_record.sms_record_id, status, Some(e.to_string())).await?;
+                    } else {
+                        warn!(
+                            "SMS {} delivery failed permanently due to memory capacity: {}",
+                            sms_record.sms_record_id, e
+                        );
+                        self.db.update_sms_status_with_reason(
+                            &sms_record.sms_record_id,
+                            SmsDeliveryStatus::MemoryCapacityExceeded,
+                            Some(e.to_string())
+                        ).await?;
+                    }
                 }
             }
         }
