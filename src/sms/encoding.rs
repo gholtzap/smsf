@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 const GSM_7BIT_BASIC: [char; 128] = [
     '@', '£', '$', '¥', 'è', 'é', 'ù', 'ì', 'ò', 'Ç', '\n', 'Ø', 'ø', '\r', 'Å', 'å',
@@ -24,7 +25,7 @@ const GSM_7BIT_EXT: [(char, u8); 10] = [
     ('\u{000C}', 0x0A),
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DataCodingScheme {
     Gsm7Bit,
     Data8Bit,

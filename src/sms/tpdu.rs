@@ -1,4 +1,5 @@
 use super::encoding::{decode_text, encode_text, DataCodingScheme};
+use super::udh::UserDataHeader;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 
@@ -21,6 +22,7 @@ pub struct TpSubmit {
     pub status_report_request: bool,
     pub reply_path: bool,
     pub reject_duplicates: bool,
+    pub udh: Option<UserDataHeader>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +36,7 @@ pub struct TpDeliver {
     pub more_messages_to_send: bool,
     pub status_report_indication: bool,
     pub reply_path: bool,
+    pub udh: Option<UserDataHeader>,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +69,7 @@ impl TpSubmit {
             status_report_request: false,
             reply_path: false,
             reject_duplicates: false,
+            udh: None,
         }
     }
 
@@ -81,6 +85,9 @@ impl TpSubmit {
         }
         if self.status_report_request {
             mti_flags |= 0x20;
+        }
+        if self.udh.is_some() {
+            mti_flags |= 0x40;
         }
         if self.reply_path {
             mti_flags |= 0x80;
@@ -99,8 +106,28 @@ impl TpSubmit {
             pdu.push(vp);
         }
 
-        pdu.push(self.user_data_length);
-        pdu.extend_from_slice(&self.user_data);
+        let mut combined_user_data = Vec::new();
+        if let Some(udh) = &self.udh {
+            combined_user_data.extend_from_slice(&udh.encode());
+        }
+        combined_user_data.extend_from_slice(&self.user_data);
+
+        let udl = if self.udh.is_some() {
+            match self.data_coding_scheme {
+                DataCodingScheme::Gsm7Bit => {
+                    let udh_len = self.udh.as_ref().unwrap().total_length;
+                    let padding_bits = 7 - ((udh_len * 8) % 7);
+                    let total_septets = ((udh_len * 8 + padding_bits) / 7) + self.user_data_length as usize;
+                    total_septets as u8
+                }
+                _ => combined_user_data.len() as u8,
+            }
+        } else {
+            self.user_data_length
+        };
+
+        pdu.push(udl);
+        pdu.extend_from_slice(&combined_user_data);
 
         pdu
     }
@@ -114,6 +141,7 @@ impl TpSubmit {
         let reject_duplicates = (mti_flags & 0x04) != 0;
         let has_validity_period = (mti_flags & 0x10) != 0;
         let status_report_request = (mti_flags & 0x20) != 0;
+        let has_udh = (mti_flags & 0x40) != 0;
         let reply_path = (mti_flags & 0x80) != 0;
 
         let message_reference = data[1];
@@ -139,7 +167,14 @@ impl TpSubmit {
         let user_data_length = data[pos];
         pos += 1;
 
-        let user_data = data[pos..].to_vec();
+        let combined_data = &data[pos..];
+
+        let (udh, user_data) = if has_udh {
+            let (parsed_udh, udh_len) = UserDataHeader::parse(combined_data)?;
+            (Some(parsed_udh), combined_data[udh_len..].to_vec())
+        } else {
+            (None, combined_data.to_vec())
+        };
 
         Ok(Self {
             message_reference,
@@ -152,6 +187,7 @@ impl TpSubmit {
             status_report_request,
             reply_path,
             reject_duplicates,
+            udh,
         })
     }
 
@@ -179,6 +215,7 @@ impl TpDeliver {
             more_messages_to_send: false,
             status_report_indication: false,
             reply_path: false,
+            udh: None,
         }
     }
 
@@ -191,6 +228,9 @@ impl TpDeliver {
         }
         if self.status_report_indication {
             mti_flags |= 0x20;
+        }
+        if self.udh.is_some() {
+            mti_flags |= 0x40;
         }
         if self.reply_path {
             mti_flags |= 0x80;
@@ -206,8 +246,28 @@ impl TpDeliver {
         let scts = encode_timestamp(&self.timestamp);
         pdu.extend_from_slice(&scts);
 
-        pdu.push(self.user_data_length);
-        pdu.extend_from_slice(&self.user_data);
+        let mut combined_user_data = Vec::new();
+        if let Some(udh) = &self.udh {
+            combined_user_data.extend_from_slice(&udh.encode());
+        }
+        combined_user_data.extend_from_slice(&self.user_data);
+
+        let udl = if self.udh.is_some() {
+            match self.data_coding_scheme {
+                DataCodingScheme::Gsm7Bit => {
+                    let udh_len = self.udh.as_ref().unwrap().total_length;
+                    let padding_bits = 7 - ((udh_len * 8) % 7);
+                    let total_septets = ((udh_len * 8 + padding_bits) / 7) + self.user_data_length as usize;
+                    total_septets as u8
+                }
+                _ => combined_user_data.len() as u8,
+            }
+        } else {
+            self.user_data_length
+        };
+
+        pdu.push(udl);
+        pdu.extend_from_slice(&combined_user_data);
 
         pdu
     }
@@ -220,6 +280,7 @@ impl TpDeliver {
         let mti_flags = data[0];
         let more_messages_to_send = (mti_flags & 0x04) != 0;
         let status_report_indication = (mti_flags & 0x20) != 0;
+        let has_udh = (mti_flags & 0x40) != 0;
         let reply_path = (mti_flags & 0x80) != 0;
 
         let (originating_address, addr_len) = decode_address(&data[1..])?;
@@ -238,7 +299,14 @@ impl TpDeliver {
         let user_data_length = data[pos];
         pos += 1;
 
-        let user_data = data[pos..].to_vec();
+        let combined_data = &data[pos..];
+
+        let (udh, user_data) = if has_udh {
+            let (parsed_udh, udh_len) = UserDataHeader::parse(combined_data)?;
+            (Some(parsed_udh), combined_data[udh_len..].to_vec())
+        } else {
+            (None, combined_data.to_vec())
+        };
 
         Ok(Self {
             originating_address,
@@ -250,6 +318,7 @@ impl TpDeliver {
             more_messages_to_send,
             status_report_indication,
             reply_path,
+            udh,
         })
     }
 
