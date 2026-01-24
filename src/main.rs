@@ -45,7 +45,6 @@ async fn main() -> Result<()> {
     info!("Database connected");
 
     let context_store = UeSmsContextStore::new();
-    let amf_client = AmfClient::new();
     let udm_client = UdmClient::new(config.udm_uri.clone());
 
     let nrf_client = Arc::new(NrfClient::new(
@@ -55,6 +54,8 @@ async fn main() -> Result<()> {
 
     let profile = nrf_client.build_smsf_profile(&config.smsf_host, config.sbi_bind_port);
     nrf_client.register(profile).await?;
+
+    let amf_client = AmfClient::with_nrf(nrf_client.clone());
 
     let nrf_client_clone = nrf_client.clone();
     let smsf_host = config.smsf_host.clone();

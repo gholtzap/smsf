@@ -2,7 +2,11 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use std::sync::Arc;
+use tracing::{info, warn};
+
+use super::nrf::{NfType, NrfClient};
+use crate::sbi::models::{Guami, UserLocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,9 +41,25 @@ pub struct N2SmInformation {
     pub content_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UeContextInfo {
+    pub supi: String,
+    #[serde(rename = "cmState")]
+    pub cm_state: CmState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CmState {
+    Connected,
+    Idle,
+}
+
 #[derive(Clone)]
 pub struct AmfClient {
     client: Client,
+    nrf_client: Option<Arc<NrfClient>>,
 }
 
 impl AmfClient {
@@ -49,6 +69,107 @@ impl AmfClient {
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .unwrap_or_else(|_| Client::new()),
+            nrf_client: None,
+        }
+    }
+
+    pub fn with_nrf(nrf_client: Arc<NrfClient>) -> Self {
+        Self {
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| Client::new()),
+            nrf_client: Some(nrf_client),
+        }
+    }
+
+    pub async fn discover_amf(
+        &self,
+        guami: Option<&Guami>,
+        _ue_location: Option<&UserLocation>,
+    ) -> Result<String> {
+        let nrf_client = self
+            .nrf_client
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("NRF client not configured"))?;
+
+        let mut query_params = std::collections::HashMap::new();
+
+        if let Some(guami) = guami {
+            query_params.insert(
+                "guami".to_string(),
+                serde_json::to_string(&guami).unwrap_or_default(),
+            );
+        }
+
+        let search_result = nrf_client
+            .discover(NfType::Amf, Some(query_params))
+            .await
+            .context("Failed to discover AMF from NRF")?;
+
+        if search_result.nf_instances.is_empty() {
+            return Err(anyhow::anyhow!("No AMF instances found"));
+        }
+
+        let amf_instance = &search_result.nf_instances[0];
+
+        if let Some(ref services) = amf_instance.nf_services {
+            for service in services {
+                if service.service_name == "namf-comm" {
+                    if let Some(ref api_prefix) = service.api_prefix {
+                        info!("Discovered AMF at {}", api_prefix);
+                        return Ok(api_prefix.clone());
+                    }
+                }
+            }
+        }
+
+        if let Some(ref ipv4_addrs) = amf_instance.ipv4_addresses {
+            if let Some(first_addr) = ipv4_addrs.first() {
+                let amf_uri = format!("http://{}", first_addr);
+                info!("Discovered AMF at {}", amf_uri);
+                return Ok(amf_uri);
+            }
+        }
+
+        Err(anyhow::anyhow!("No valid AMF endpoint found"))
+    }
+
+    pub async fn check_ue_reachability(&self, supi: &str, amf_uri: &str) -> Result<bool> {
+        let url = format!("{}/namf-comm/v1/ue-contexts/{}", amf_uri, supi);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to check UE context at AMF")?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let context_info: UeContextInfo = response
+                    .json()
+                    .await
+                    .context("Failed to parse UE context response")?;
+
+                let is_reachable = context_info.cm_state == CmState::Connected;
+                info!(
+                    "UE {} reachability: {} (CM state: {:?})",
+                    supi, is_reachable, context_info.cm_state
+                );
+                Ok(is_reachable)
+            }
+            StatusCode::NOT_FOUND => {
+                warn!("UE context not found at AMF for SUPI: {}", supi);
+                Ok(false)
+            }
+            status => {
+                warn!(
+                    "Failed to check UE reachability at AMF, status: {}",
+                    status
+                );
+                Ok(false)
+            }
         }
     }
 

@@ -33,13 +33,29 @@ impl SmsDeliveryService {
         let now = Utc::now();
         let expires_at = now + Duration::seconds(self.default_validity_secs as i64);
 
+        let mut amf_uri = context.amf_id.clone();
+
+        if amf_uri.is_empty() {
+            info!("No AMF ID in context, attempting AMF discovery for SUPI: {}", supi);
+            match self.amf_client.discover_amf(context.guami.as_ref(), context.ue_location.as_ref()).await {
+                Ok(discovered_uri) => {
+                    info!("Discovered AMF via NRF: {}", discovered_uri);
+                    amf_uri = discovered_uri;
+                }
+                Err(e) => {
+                    warn!("Failed to discover AMF via NRF: {}", e);
+                    return Err(anyhow::anyhow!("No AMF available for delivery"));
+                }
+            }
+        }
+
         let sms_record = SmsRecord {
             sms_record_id: sms_record_id.clone(),
             sms_payload: sms_data.sms_msg.clone(),
             delivery_status: SmsDeliveryStatus::Pending,
             gpsi: context.gpsi.clone(),
             supi: supi.to_string(),
-            amf_id: context.amf_id.clone(),
+            amf_id: amf_uri.clone(),
             retry_count: 0,
             next_retry_at: None,
             expires_at,
@@ -63,6 +79,18 @@ impl SmsDeliveryService {
     }
 
     pub async fn attempt_delivery(&self, sms_record: &SmsRecord) -> Result<()> {
+        match self.amf_client.check_ue_reachability(&sms_record.supi, &sms_record.amf_id).await {
+            Ok(true) => {
+                info!("UE is reachable, proceeding with SMS delivery");
+            }
+            Ok(false) => {
+                warn!("UE is not reachable (CM-IDLE state), delivery will be queued");
+            }
+            Err(e) => {
+                warn!("Failed to check UE reachability: {}, continuing with delivery attempt", e);
+            }
+        }
+
         self.amf_client
             .send_n1n2_message(&sms_record.supi, &sms_record.amf_id, sms_record.sms_payload.clone())
             .await
