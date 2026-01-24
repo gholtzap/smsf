@@ -120,21 +120,26 @@ pub async fn send_uplink_sms(
 
     let sms_record_id = uuid::Uuid::new_v4().to_string();
 
-    let (status_report_requested, message_reference, destination_address) =
+    let (status_report_requested, message_reference, destination_address, validity_period) =
         match TpSubmit::decode(&sms_payload) {
             Ok(tp_submit) => (
                 tp_submit.status_report_request,
                 Some(tp_submit.message_reference),
-                Some(tp_submit.destination_address),
+                Some(tp_submit.destination_address.clone()),
+                tp_submit.get_validity_period(),
             ),
             Err(e) => {
                 error!("Failed to decode TP-SUBMIT: {}", e);
-                (false, None, None)
+                (false, None, None, None)
             }
         };
 
     let context = state.context_store.get(&supi).unwrap();
     let now = Utc::now();
+    let expires_at = validity_period
+        .map(|vp| now + vp)
+        .unwrap_or_else(|| now + Duration::days(1));
+
     let sms_record = SmsRecord {
         sms_record_id: sms_record_id.clone(),
         sms_payload: sms_payload.clone(),
@@ -144,7 +149,7 @@ pub async fn send_uplink_sms(
         amf_id: context.amf_id.clone(),
         retry_count: 0,
         next_retry_at: None,
-        expires_at: now + Duration::days(1),
+        expires_at,
         created_at: now,
         updated_at: now,
         status_report_requested,

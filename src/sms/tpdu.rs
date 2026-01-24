@@ -1,7 +1,7 @@
 use super::encoding::{decode_text, encode_text, DataCodingScheme};
 use super::udh::UserDataHeader;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 
 #[derive(Debug, Clone)]
 pub enum TpPdu {
@@ -132,7 +132,7 @@ impl TpSubmit {
             destination_address: destination,
             protocol_identifier: 0,
             data_coding_scheme: dcs,
-            validity_period: Some(0xAA),
+            validity_period: Some(encode_validity_period(Duration::days(7))),
             user_data,
             user_data_length,
             status_report_request: false,
@@ -262,6 +262,10 @@ impl TpSubmit {
 
     pub fn get_text(&self) -> Result<String> {
         decode_text(&self.user_data, self.data_coding_scheme, self.user_data_length as usize)
+    }
+
+    pub fn get_validity_period(&self) -> Option<Duration> {
+        self.validity_period.map(decode_validity_period)
     }
 }
 
@@ -503,6 +507,35 @@ fn from_bcd(byte: u8) -> u8 {
     let tens = byte & 0x0F;
     let ones = (byte >> 4) & 0x0F;
     (tens * 10) + ones
+}
+
+pub fn decode_validity_period(vp_byte: u8) -> Duration {
+    match vp_byte {
+        0..=143 => Duration::minutes(((vp_byte as i64 + 1) * 5) as i64),
+        144..=167 => Duration::minutes(720 + ((vp_byte as i64 - 143) * 30) as i64),
+        168..=196 => Duration::days((vp_byte as i64 - 166) as i64),
+        197..=255 => Duration::weeks((vp_byte as i64 - 192) as i64),
+    }
+}
+
+pub fn encode_validity_period(duration: Duration) -> u8 {
+    let total_minutes = duration.num_minutes();
+
+    if total_minutes <= 720 {
+        let intervals = (total_minutes / 5).max(1);
+        (intervals - 1).min(143) as u8
+    } else if total_minutes <= 1440 {
+        let intervals = (total_minutes - 720) / 30;
+        (143 + intervals).min(167) as u8
+    } else {
+        let total_days = duration.num_days();
+        if total_days <= 30 {
+            (166 + total_days).min(196) as u8
+        } else {
+            let total_weeks = duration.num_weeks();
+            (192 + total_weeks).min(255) as u8
+        }
+    }
 }
 
 #[cfg(test)]
