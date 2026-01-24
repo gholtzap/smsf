@@ -1,10 +1,9 @@
 use crate::context::ue_sms_context::UeSmsContext;
 use crate::sms::types::{SmsDeliveryStatus, SmsRecord};
 use anyhow::Result;
-use chrono::Utc;
 use mongodb::bson::doc;
 use mongodb::{Client, Collection};
-use tracing::{error, info};
+use tracing::info;
 
 #[derive(Clone)]
 pub struct Database {

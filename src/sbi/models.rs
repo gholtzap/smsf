@@ -1,5 +1,4 @@
 use crate::sms::types::{AccessType, SmsDeliveryStatus};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +70,14 @@ pub struct SmsRecordData {
 pub struct SmsRecordDeliveryData {
     #[serde(rename = "smsRecordId")]
     pub sms_record_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmsDeliveryReportData {
+    #[serde(rename = "smsRecordId")]
+    pub sms_record_id: String,
+    #[serde(rename = "deliveryStatus")]
+    pub delivery_status: SmsDeliveryStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

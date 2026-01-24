@@ -1,7 +1,7 @@
 use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
-use crate::sbi::handlers::{activation, deactivation, send_mt_sms, send_sms, update};
+use crate::sbi::handlers::{activation, deactivation, delivery_report, send_mt_sms, send_sms, update};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{delete, patch, post, put};
@@ -42,6 +42,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         amf_client: state.amf_client.clone(),
     });
 
+    let delivery_report_state = Arc::new(delivery_report::AppState {
+        db: state.db.clone(),
+    });
+
     Router::new()
         .route("/health", axum::routing::get(health_check))
         .route(
@@ -63,6 +67,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/nsmsf-sms/v1/ue-contexts/:supi/send-mt-sms",
             post(send_mt_sms::send_downlink_sms).with_state(send_mt_sms_state),
+        )
+        .route(
+            "/nsmsf-sms/v1/ue-contexts/:supi/delivery-report",
+            post(delivery_report::receive_delivery_report).with_state(delivery_report_state),
         )
         .layer(TraceLayer::new_for_http())
 }
