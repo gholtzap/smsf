@@ -85,4 +85,63 @@ impl Database {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get SMS record: {}", e))
     }
+
+    pub async fn get_pending_retries(&self) -> Result<Vec<SmsRecord>> {
+        use mongodb::bson::DateTime as BsonDateTime;
+        use futures_util::TryStreamExt;
+
+        let now = BsonDateTime::now();
+        let cursor = self.sms_records
+            .find(doc! {
+                "$or": [
+                    { "delivery_status": "PENDING" },
+                    { "delivery_status": "FAILED" }
+                ],
+                "expires_at": { "$gt": now },
+                "$or": [
+                    { "next_retry_at": { "$lte": now } },
+                    { "next_retry_at": null }
+                ]
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to query pending retries: {}", e))?;
+
+        cursor.try_collect::<Vec<SmsRecord>>().await
+            .map_err(|e| anyhow::anyhow!("Failed to collect pending retries: {}", e))
+    }
+
+    pub async fn increment_retry_count(&self, sms_record_id: &str, next_retry_at: Option<chrono::DateTime<chrono::Utc>>) -> Result<()> {
+        let next_retry_bson = next_retry_at.map(|dt| {
+            mongodb::bson::DateTime::from_millis(dt.timestamp_millis())
+        });
+
+        self.sms_records
+            .update_one(
+                doc! { "sms_record_id": sms_record_id },
+                doc! {
+                    "$inc": { "retry_count": 1 },
+                    "$set": {
+                        "next_retry_at": next_retry_bson,
+                        "updated_at": mongodb::bson::DateTime::now()
+                    }
+                },
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to increment retry count: {}", e))?;
+        Ok(())
+    }
+
+    pub async fn mark_expired(&self, sms_record_id: &str) -> Result<()> {
+        self.sms_records
+            .update_one(
+                doc! { "sms_record_id": sms_record_id },
+                doc! { "$set": {
+                    "delivery_status": "FAILED",
+                    "updated_at": mongodb::bson::DateTime::now()
+                }},
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to mark as expired: {}", e))?;
+        Ok(())
+    }
 }

@@ -12,6 +12,8 @@ use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
 use crate::nf_client::nrf::NrfClient;
 use crate::sbi::server::{create_router, AppState};
+use crate::sms::delivery::SmsDeliveryService;
+use crate::sms::retry::SmsRetryService;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -59,10 +61,29 @@ async fn main() -> Result<()> {
         .start_heartbeat_task(smsf_host, smsf_port)
         .await;
 
+    let delivery_service = Arc::new(SmsDeliveryService::new(
+        context_store.clone(),
+        db.clone(),
+        amf_client.clone(),
+        config.retry.default_validity_period_secs,
+    ));
+
+    let retry_service = Arc::new(SmsRetryService::new(
+        db.clone(),
+        delivery_service.clone(),
+        config.retry.clone(),
+    ));
+
+    let retry_service_clone = retry_service.clone();
+    tokio::spawn(async move {
+        retry_service_clone.start().await;
+    });
+
     let app_state = Arc::new(AppState {
         context_store,
         db,
         amf_client,
+        delivery_service,
     });
 
     let app = create_router(app_state);

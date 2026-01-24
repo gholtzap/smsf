@@ -23,6 +23,27 @@ pub struct TlsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryConfig {
+    pub max_attempts: u32,
+    pub initial_backoff_secs: u64,
+    pub max_backoff_secs: u64,
+    pub retry_interval_secs: u64,
+    pub default_validity_period_secs: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: 5,
+            initial_backoff_secs: 10,
+            max_backoff_secs: 3600,
+            retry_interval_secs: 60,
+            default_validity_period_secs: 86400,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub sbi_bind_addr: String,
     pub sbi_bind_port: u16,
@@ -32,6 +53,7 @@ pub struct Config {
     pub smsf_host: String,
     pub oauth2: OAuth2Config,
     pub tls: TlsConfig,
+    pub retry: RetryConfig,
 }
 
 impl Default for OAuth2Config {
@@ -141,6 +163,8 @@ impl Config {
             require_client_cert: tls_require_client_cert,
         };
 
+        let retry = RetryConfig::default();
+
         Ok(Self {
             sbi_bind_addr,
             sbi_bind_port,
@@ -150,6 +174,7 @@ impl Config {
             smsf_host,
             oauth2,
             tls,
+            retry,
         })
     }
 

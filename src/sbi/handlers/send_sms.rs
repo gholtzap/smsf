@@ -9,7 +9,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::Engine;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -92,13 +92,19 @@ pub async fn send_uplink_sms(
     let sms_record_id = uuid::Uuid::new_v4().to_string();
 
     let context = state.context_store.get(&supi).unwrap();
+    let now = Utc::now();
     let sms_record = SmsRecord {
         sms_record_id: sms_record_id.clone(),
         sms_payload: sms_payload.clone(),
         delivery_status: SmsDeliveryStatus::Accepted,
         gpsi: context.gpsi.clone(),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        supi: supi.clone(),
+        amf_id: context.amf_id.clone(),
+        retry_count: 0,
+        next_retry_at: None,
+        expires_at: now + Duration::days(1),
+        created_at: now,
+        updated_at: now,
     };
 
     if let Err(e) = state.db.save_sms_record(&sms_record).await {

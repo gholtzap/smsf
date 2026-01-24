@@ -17,6 +17,7 @@ pub struct AppState {
     pub context_store: UeSmsContextStore,
     pub db: Database,
     pub amf_client: AmfClient,
+    pub delivery_service: Arc<SmsDeliveryService>,
 }
 
 pub async fn send_downlink_sms(
@@ -96,13 +97,7 @@ pub async fn send_downlink_sms(
         sms_msg: sms_payload,
     };
 
-    let delivery_service = SmsDeliveryService::new(
-        state.context_store.clone(),
-        state.db.clone(),
-        state.amf_client.clone(),
-    );
-
-    match delivery_service.deliver_mt_sms(&supi, sms_data).await {
+    match state.delivery_service.deliver_mt_sms(&supi, sms_data).await {
         Ok(record_id) => {
             let response_data = SmsRecordDeliveryData {
                 sms_record_id: record_id,
