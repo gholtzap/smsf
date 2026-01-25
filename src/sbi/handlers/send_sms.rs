@@ -153,10 +153,13 @@ pub async fn send_uplink_sms(
         created_at: now,
         updated_at: now,
         status_report_requested,
-        originator_address: context.gpsi.clone().or(destination_address),
+        originator_address: context.gpsi.clone(),
+        destination_address: destination_address.clone(),
         message_reference,
         is_mobile_originated: true,
         failure_reason: None,
+        is_international: None,
+        route_type: None,
     };
 
     if let Err(e) = state.db.save_sms_record(&sms_record).await {

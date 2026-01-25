@@ -1,4 +1,5 @@
 use super::encoding::{decode_text, encode_text, DataCodingScheme};
+use super::routing::{decode_ton_npi, encode_ton_npi, NumberingPlanIdentification, TypeOfNumber};
 use super::udh::UserDataHeader;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
@@ -408,11 +409,15 @@ fn encode_address(address: &str) -> Vec<u8> {
 
     result.push(addr_len as u8);
 
-    let ton_npi = if address.starts_with('+') {
-        0x91
+    let (ton, npi) = if address.starts_with('+') {
+        (TypeOfNumber::International, NumberingPlanIdentification::Isdn)
+    } else if address.chars().all(|c| c.is_ascii_digit()) {
+        (TypeOfNumber::Unknown, NumberingPlanIdentification::Isdn)
     } else {
-        0x81
+        (TypeOfNumber::Alphanumeric, NumberingPlanIdentification::Unknown)
     };
+
+    let ton_npi = encode_ton_npi(ton, npi);
     result.push(ton_npi);
 
     let mut packed_digits = Vec::new();
@@ -443,8 +448,10 @@ fn decode_address(data: &[u8]) -> Result<(String, usize)> {
         return Err(anyhow!("Address data truncated"));
     }
 
+    let (ton, _npi) = decode_ton_npi(ton_npi);
+
     let mut digits = String::new();
-    if ton_npi == 0x91 {
+    if ton == TypeOfNumber::International {
         digits.push('+');
     }
 

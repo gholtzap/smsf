@@ -29,9 +29,12 @@ pub struct SmsRecord {
     pub updated_at: DateTime<Utc>,
     pub status_report_requested: bool,
     pub originator_address: Option<String>,
+    pub destination_address: Option<String>,
     pub message_reference: Option<u8>,
     pub is_mobile_originated: bool,
     pub failure_reason: Option<String>,
+    pub is_international: Option<bool>,
+    pub route_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

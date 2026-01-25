@@ -63,9 +63,12 @@ impl SmsDeliveryService {
             updated_at: now,
             status_report_requested: false,
             originator_address: None,
+            destination_address: context.gpsi.clone(),
             message_reference: None,
             is_mobile_originated: false,
             failure_reason: None,
+            is_international: None,
+            route_type: None,
         };
 
         self.db.save_sms_record(&sms_record).await?;

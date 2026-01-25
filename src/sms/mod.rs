@@ -4,6 +4,7 @@ pub mod delivery;
 pub mod encoding;
 pub mod reassembly;
 pub mod retry;
+pub mod routing;
 pub mod rp;
 pub mod status_report;
 pub mod tpdu;
