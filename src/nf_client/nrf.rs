@@ -7,6 +7,8 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
+use crate::config::TlsConfig;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum NfType {
@@ -129,23 +131,40 @@ pub struct NrfClient {
     nrf_uri: String,
     nf_instance_id: String,
     profile: Arc<RwLock<Option<NFProfile>>>,
+    use_tls: bool,
 }
 
 impl NrfClient {
-    pub fn new(nrf_uri: String, nf_instance_id: String) -> Self {
+    pub fn new(nrf_uri: String, nf_instance_id: String, tls_config: Option<&TlsConfig>) -> Self {
+        let use_tls = tls_config.map_or(false, |c| c.enabled);
+
+        let mut client_builder = Client::builder().timeout(std::time::Duration::from_secs(30));
+
+        if let Some(tls_cfg) = tls_config {
+            if tls_cfg.enabled {
+                if let Ok(rustls_config) = crate::tls::build_client_config(tls_cfg) {
+                    client_builder = client_builder
+                        .use_preconfigured_tls(rustls_config)
+                        .https_only(true);
+                    info!("NRF client configured with TLS support");
+                } else {
+                    error!("Failed to build TLS config for NRF client, falling back to HTTP");
+                }
+            }
+        }
+
         Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client: client_builder.build().unwrap_or_else(|_| Client::new()),
             nrf_uri,
             nf_instance_id,
             profile: Arc::new(RwLock::new(None)),
+            use_tls,
         }
     }
 
     pub fn build_smsf_profile(&self, smsf_host: &str, smsf_port: u16) -> NFProfile {
-        let service_base_url = format!("http://{}:{}", smsf_host, smsf_port);
+        let scheme = if self.use_tls { "https" } else { "http" };
+        let service_base_url = format!("{}://{}:{}", scheme, smsf_host, smsf_port);
 
         let nf_services = vec![
             NFService {
@@ -155,7 +174,7 @@ impl NrfClient {
                     api_version_in_uri: "v1".to_string(),
                     api_full_version: "1.0.0".to_string(),
                 }],
-                scheme: "http".to_string(),
+                scheme: scheme.to_string(),
                 nf_service_status: NfServiceStatus::Registered,
                 ipv4_addresses: Some(vec![smsf_host.to_string()]),
                 api_prefix: Some(service_base_url.clone()),

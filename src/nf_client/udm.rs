@@ -3,9 +3,10 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use super::nrf::{NfType, NrfClient};
+use crate::config::TlsConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,28 +53,43 @@ pub struct UdmClient {
 }
 
 impl UdmClient {
-    pub fn new(udm_uri: String) -> Self {
+    pub fn new(udm_uri: String, tls_config: Option<&TlsConfig>) -> Self {
+        let client = Self::build_client(tls_config);
         Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client,
             nrf_client: None,
             udm_uri_cache: Arc::new(RwLock::new(None)),
             fallback_udm_uri: Some(udm_uri),
         }
     }
 
-    pub fn with_nrf(nrf_client: Arc<NrfClient>, fallback_udm_uri: Option<String>) -> Self {
+    pub fn with_nrf(nrf_client: Arc<NrfClient>, fallback_udm_uri: Option<String>, tls_config: Option<&TlsConfig>) -> Self {
+        let client = Self::build_client(tls_config);
         Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client,
             nrf_client: Some(nrf_client),
             udm_uri_cache: Arc::new(RwLock::new(None)),
             fallback_udm_uri,
         }
+    }
+
+    fn build_client(tls_config: Option<&TlsConfig>) -> Client {
+        let mut client_builder = Client::builder().timeout(std::time::Duration::from_secs(30));
+
+        if let Some(tls_cfg) = tls_config {
+            if tls_cfg.enabled {
+                if let Ok(rustls_config) = crate::tls::build_client_config(tls_cfg) {
+                    client_builder = client_builder
+                        .use_preconfigured_tls(rustls_config)
+                        .https_only(true);
+                    info!("UDM client configured with TLS support");
+                } else {
+                    error!("Failed to build TLS config for UDM client, falling back to HTTP");
+                }
+            }
+        }
+
+        client_builder.build().unwrap_or_else(|_| Client::new())
     }
 
     async fn get_udm_uri(&self, supi: &str) -> Result<String> {

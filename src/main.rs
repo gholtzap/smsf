@@ -4,6 +4,7 @@ mod db;
 mod nf_client;
 mod sbi;
 mod sms;
+mod tls;
 mod utils;
 
 use crate::config::Config;
@@ -60,14 +61,15 @@ async fn main() -> Result<()> {
     let nrf_client = Arc::new(NrfClient::new(
         config.nrf_uri.clone(),
         config.nf_instance_id.clone(),
+        Some(&config.tls),
     ));
 
     let profile = nrf_client.build_smsf_profile(&config.smsf_host, config.sbi_bind_port);
     nrf_client.register(profile).await?;
 
-    let udm_client = UdmClient::with_nrf(nrf_client.clone(), Some(config.udm_uri.clone()));
+    let udm_client = UdmClient::with_nrf(nrf_client.clone(), Some(config.udm_uri.clone()), Some(&config.tls));
 
-    let amf_client = AmfClient::with_nrf(nrf_client.clone());
+    let amf_client = AmfClient::with_nrf(nrf_client.clone(), Some(&config.tls));
 
     let nrf_client_clone = nrf_client.clone();
     let smsf_host = config.smsf_host.clone();
@@ -111,8 +113,6 @@ async fn main() -> Result<()> {
     let app = create_router(app_state);
 
     let bind_addr = format!("{}:{}", config.sbi_bind_addr, config.sbi_bind_port);
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-    info!("SMSF listening on {}", bind_addr);
 
     let nrf_for_shutdown = nrf_client.clone();
     tokio::spawn(async move {
@@ -124,7 +124,17 @@ async fn main() -> Result<()> {
         std::process::exit(0);
     });
 
-    axum::serve(listener, app).await?;
+    if config.tls.enabled {
+        let tls_config = crate::tls::load_tls_config(&config.tls).await?;
+        info!("SMSF listening on {} with TLS enabled", bind_addr);
+        axum_server::bind_rustls(bind_addr.parse()?, tls_config)
+            .serve(app.into_make_service())
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+        info!("SMSF listening on {} (no TLS)", bind_addr);
+        axum::serve(listener, app).await?;
+    }
 
     Ok(())
 }
