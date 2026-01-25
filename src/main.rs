@@ -57,8 +57,6 @@ async fn main() -> Result<()> {
             error!("Failed to load UE contexts from database: {}", e);
         }
     }
-    let udm_client = UdmClient::new(config.udm_uri.clone());
-
     let nrf_client = Arc::new(NrfClient::new(
         config.nrf_uri.clone(),
         config.nf_instance_id.clone(),
@@ -66,6 +64,8 @@ async fn main() -> Result<()> {
 
     let profile = nrf_client.build_smsf_profile(&config.smsf_host, config.sbi_bind_port);
     nrf_client.register(profile).await?;
+
+    let udm_client = UdmClient::with_nrf(nrf_client.clone(), Some(config.udm_uri.clone()));
 
     let amf_client = AmfClient::with_nrf(nrf_client.clone());
 
