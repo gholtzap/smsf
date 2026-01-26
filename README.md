@@ -12,6 +12,8 @@
 - MongoDB Persistence
 - ETag Support for Conditional Updates
 - Multipart SMS Payload Handling
+- OAuth 2.0 JWT Authentication
+- TLS/mTLS Support for SBI
 
 ## API Endpoints
 
@@ -32,6 +34,22 @@ Environment variables:
 - `NF_INSTANCE_ID` - NF instance ID (auto-generated if not set)
 - `SMSF_HOST` - SMSF hostname/IP
 - `CONFIG_FILE` - Path to JSON config file (optional)
+
+OAuth 2.0 Configuration:
+- `OAUTH2_ENABLED` - Enable OAuth 2.0 authentication (default: false)
+- `OAUTH2_ISSUER` - JWT issuer to validate
+- `OAUTH2_AUDIENCE` - Comma-separated list of valid audiences
+- `OAUTH2_REQUIRED_SCOPE` - Required scope in JWT token (optional)
+- `JWT_SECRET` - Secret key for HS256/HS384/HS512 validation
+
+TLS Configuration:
+- `TLS_ENABLED` - Enable TLS (default: false)
+- `TLS_CERT_PATH` - Server certificate path
+- `TLS_KEY_PATH` - Server private key path
+- `TLS_CLIENT_CERT_PATH` - Client certificate for outbound requests
+- `TLS_CLIENT_KEY_PATH` - Client private key for outbound requests
+- `TLS_CLIENT_CA_PATH` - CA certificate for client verification
+- `TLS_REQUIRE_CLIENT_CERT` - Require client certificates (mTLS)
 
 ## Build
 

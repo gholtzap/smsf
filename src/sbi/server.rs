@@ -1,11 +1,14 @@
+use crate::config::OAuth2Config;
 use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
 use crate::nf_client::udm::UdmClient;
 use crate::sbi::handlers::{activation, deactivation, delivery_report, send_mt_sms, send_sms, update};
+use crate::sbi::middleware::oauth2::oauth2_auth;
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::status_report::StatusReportService;
 use axum::http::StatusCode;
+use axum::middleware as axum_middleware;
 use axum::response::IntoResponse;
 use axum::routing::{delete, patch, post, put};
 use axum::Router;
@@ -19,6 +22,7 @@ pub struct AppState {
     pub udm_client: UdmClient,
     pub delivery_service: Arc<SmsDeliveryService>,
     pub status_report_service: Arc<StatusReportService>,
+    pub oauth2_config: OAuth2Config,
 }
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -57,8 +61,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         status_report_service: state.status_report_service.clone(),
     });
 
-    Router::new()
-        .route("/health", axum::routing::get(health_check))
+    let protected = Router::new()
         .route(
             "/nsmsf-sms/v1/ue-contexts/:supi",
             put(activation::activate_sms_service).with_state(activation_state),
@@ -83,6 +86,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/nsmsf-sms/v1/ue-contexts/:supi/delivery-report",
             post(delivery_report::receive_delivery_report).with_state(delivery_report_state),
         )
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            oauth2_auth,
+        ));
+
+    Router::new()
+        .route("/health", axum::routing::get(health_check))
+        .merge(protected)
         .layer(TraceLayer::new_for_http())
 }
 

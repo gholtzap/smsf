@@ -108,6 +108,7 @@ async fn main() -> Result<()> {
         udm_client,
         delivery_service,
         status_report_service,
+        oauth2_config: config.oauth2.clone(),
     });
 
     let app = create_router(app_state);
