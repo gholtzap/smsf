@@ -113,7 +113,4 @@ impl ProblemDetails {
         Self::new(500, detail)
     }
 
-    pub fn conflict(detail: String) -> Self {
-        Self::new(409, detail)
-    }
 }

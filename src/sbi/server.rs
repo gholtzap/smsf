@@ -13,6 +13,7 @@ use axum::response::IntoResponse;
 use axum::routing::{delete, patch, post, put};
 use axum::Router;
 use std::sync::Arc;
+use axum::extract::DefaultBodyLimit;
 use tower_http::trace::TraceLayer;
 
 pub struct AppState {
@@ -94,6 +95,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", axum::routing::get(health_check))
         .merge(protected)
+        .layer(DefaultBodyLimit::max(1024 * 1024))
         .layer(TraceLayer::new_for_http())
 }
 
