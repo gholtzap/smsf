@@ -95,6 +95,18 @@ impl UeSmsContextStore {
         })
     }
 
+    pub fn try_update<F, E>(&self, supi: &str, f: F) -> Option<Result<UeSmsContext, E>>
+    where
+        F: FnOnce(&mut UeSmsContext) -> Result<(), E>,
+    {
+        self.store.get_mut(supi).map(|mut entry| {
+            match f(entry.value_mut()) {
+                Ok(()) => Ok(entry.value().clone()),
+                Err(e) => Err(e),
+            }
+        })
+    }
+
     pub fn contains(&self, supi: &str) -> bool {
         self.store.contains_key(supi)
     }

@@ -20,36 +20,27 @@ pub async fn update_sms_context(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let if_match = headers
+    let content_type_valid = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.contains("application/json-patch+json"))
+        .unwrap_or(false);
+
+    if !content_type_valid {
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Json(ProblemDetails::new(
+                415,
+                "Content-Type must be application/json-patch+json".to_string(),
+            )),
+        )
+            .into_response();
+    }
+
+    let if_match: Option<String> = headers
         .get(axum::http::header::IF_MATCH)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim_matches('"'));
-
-    let current_context = match state.context_store.get(&supi) {
-        Some(ctx) => ctx,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ProblemDetails::not_found(
-                    "UE SMS context not found".to_string(),
-                )),
-            )
-                .into_response();
-        }
-    };
-
-    if let Some(etag) = if_match {
-        if etag != current_context.etag {
-            return (
-                StatusCode::PRECONDITION_FAILED,
-                Json(ProblemDetails::new(
-                    412,
-                    "ETag mismatch - context has been modified".to_string(),
-                )),
-            )
-                .into_response();
-        }
-    }
+        .map(|s| s.trim_matches('"').to_string());
 
     let patch: json_patch::Patch = match serde_json::from_slice(&body) {
         Ok(p) => p,
@@ -65,59 +56,60 @@ pub async fn update_sms_context(
         }
     };
 
-    let mut context_json = match serde_json::to_value(&current_context.to_data()) {
-        Ok(v) => v,
-        Err(e) => {
-            return (
+    let result = state.context_store.try_update(&supi, |ctx| {
+        if let Some(ref etag) = if_match {
+            if *etag != ctx.etag {
+                return Err((
+                    StatusCode::PRECONDITION_FAILED,
+                    ProblemDetails::new(
+                        412,
+                        "ETag mismatch - context has been modified".to_string(),
+                    ),
+                ));
+            }
+        }
+
+        let mut context_json = serde_json::to_value(&ctx.to_data()).map_err(|e| {
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ProblemDetails::internal_error(format!(
-                    "Failed to serialize context: {}",
-                    e
-                ))),
+                ProblemDetails::internal_error(format!("Failed to serialize context: {}", e)),
             )
-                .into_response();
-        }
-    };
+        })?;
 
-    if let Err(e) = json_patch::patch(&mut context_json, &patch) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ProblemDetails::bad_request(format!(
-                "Failed to apply patch: {}",
-                e
-            ))),
-        )
-            .into_response();
-    }
-
-    let updated_data: UeSmsContextData = match serde_json::from_value(context_json) {
-        Ok(d) => d,
-        Err(e) => {
-            return (
+        json_patch::patch(&mut context_json, &patch).map_err(|e| {
+            (
                 StatusCode::BAD_REQUEST,
-                Json(ProblemDetails::bad_request(format!(
-                    "Invalid context data after patch: {}",
-                    e
-                ))),
+                ProblemDetails::bad_request(format!("Failed to apply patch: {}", e)),
             )
-                .into_response();
+        })?;
+
+        let updated_data: UeSmsContextData =
+            serde_json::from_value(context_json).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    ProblemDetails::bad_request(format!(
+                        "Invalid context data after patch: {}",
+                        e
+                    )),
+                )
+            })?;
+
+        if updated_data.supi != ctx.supi {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                ProblemDetails::bad_request("Cannot modify SUPI".to_string()),
+            ));
         }
-    };
 
-    if updated_data.supi != supi {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ProblemDetails::bad_request(
-                "Cannot modify SUPI".to_string(),
-            )),
-        )
-            .into_response();
-    }
-
-    let updated_context = match state.context_store.update(&supi, |ctx| {
         ctx.update_from_data(updated_data);
-    }) {
-        Some(ctx) => ctx,
+        Ok(())
+    });
+
+    let updated_context = match result {
+        Some(Ok(ctx)) => ctx,
+        Some(Err((status, problem))) => {
+            return (status, Json(problem)).into_response();
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
