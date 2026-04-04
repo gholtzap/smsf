@@ -10,7 +10,7 @@
 
 ## Middleware
 
-- [ ] `oauth2_auth` — OAuth 2.0 JWT authentication middleware (src/sbi/middleware/oauth2.rs:28)
+- [x] `oauth2_auth` — OAuth 2.0 JWT authentication middleware (src/sbi/middleware/oauth2.rs:28)
 
 ## Router & App State
 

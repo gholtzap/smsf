@@ -5,7 +5,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use crate::sbi::server::AppState;
 use crate::sbi::models::ProblemDetails;
@@ -55,40 +55,9 @@ pub async fn oauth2_auth(
         }
     };
 
-    let header = decode_header(token).map_err(|_| {
-        (
-            StatusCode::UNAUTHORIZED,
-            axum::Json(ProblemDetails {
-                problem_type: Some("https://example.com/unauthorized".to_string()),
-                title: Some("Unauthorized".to_string()),
-                status: 401,
-                detail: Some("Invalid token format".to_string()),
-                instance: None,
-            }),
-        )
-    })?;
-
-    let alg = header.alg;
-
-    let decoding_key = match alg {
-        Algorithm::HS256 | Algorithm::HS384 | Algorithm::HS512 => {
-            DecodingKey::from_secret(state.oauth2_config.secret_key.as_bytes())
-        }
-        _ => {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                axum::Json(ProblemDetails {
-                    problem_type: Some("https://example.com/unauthorized".to_string()),
-                    title: Some("Unauthorized".to_string()),
-                    status: 401,
-                    detail: Some("Unsupported algorithm".to_string()),
-                    instance: None,
-                }),
-            ));
-        }
-    };
-
-    let mut validation = Validation::new(alg);
+    let decoding_key = DecodingKey::from_secret(state.oauth2_config.secret_key.as_bytes());
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.algorithms = vec![Algorithm::HS256];
 
     if !state.oauth2_config.issuer.is_empty() {
         validation.set_issuer(&[&state.oauth2_config.issuer]);
@@ -108,7 +77,7 @@ pub async fn oauth2_auth(
                 problem_type: Some("https://example.com/unauthorized".to_string()),
                 title: Some("Unauthorized".to_string()),
                 status: 401,
-                detail: Some(format!("Token validation failed: {}", e)),
+                detail: Some("Token validation failed".to_string()),
                 instance: None,
             }),
         )
@@ -127,7 +96,7 @@ pub async fn oauth2_auth(
                     problem_type: Some("https://example.com/forbidden".to_string()),
                     title: Some("Forbidden".to_string()),
                     status: 403,
-                    detail: Some(format!("Required scope '{}' not present in token", required_scope)),
+                    detail: Some("Insufficient scope".to_string()),
                     instance: None,
                 }),
             ));
