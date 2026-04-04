@@ -5,6 +5,7 @@ use crate::nf_client::amf::AmfClient;
 use crate::nf_client::udm::UdmClient;
 use crate::sbi::handlers::{activation, deactivation, delivery_report, send_mt_sms, send_sms, update};
 use crate::sbi::middleware::oauth2::oauth2_auth;
+use crate::sbi::models::ProblemDetails;
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::status_report::StatusReportService;
 use axum::http::StatusCode;
@@ -95,10 +96,18 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", axum::routing::get(health_check))
         .merge(protected)
+        .fallback(fallback_handler)
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .layer(TraceLayer::new_for_http())
 }
 
 async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+async fn fallback_handler() -> (StatusCode, axum::Json<ProblemDetails>) {
+    (
+        StatusCode::NOT_FOUND,
+        axum::Json(ProblemDetails::not_found("Resource not found".to_string())),
+    )
 }

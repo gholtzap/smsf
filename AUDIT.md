@@ -14,7 +14,7 @@
 
 ## Router & App State
 
-- [ ] `create_router` — Builds the Axum router with all routes and middleware (src/sbi/server.rs:28)
+- [x] `create_router` — Builds the Axum router with all routes and middleware (src/sbi/server.rs:28)
 
 ## NF Client Operations — NRF
 
