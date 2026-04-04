@@ -2,7 +2,7 @@ use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::sbi::models::ProblemDetails;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use std::sync::Arc;
@@ -16,18 +16,38 @@ pub struct AppState {
 pub async fn deactivate_sms_service(
     State(state): State<Arc<AppState>>,
     Path(supi): Path<String>,
+    headers: HeaderMap,
 ) -> Response {
-    if !state.context_store.contains(&supi) {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ProblemDetails::not_found(
-                "UE SMS context not found".to_string(),
-            )),
-        )
-            .into_response();
-    }
+    let if_match: Option<String> = headers
+        .get(axum::http::header::IF_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_matches('"').to_string());
 
-    state.context_store.remove(&supi);
+    let context = match state.context_store.get(&supi) {
+        Some(ctx) => ctx,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ProblemDetails::not_found(
+                    "UE SMS context not found".to_string(),
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if let Some(ref etag) = if_match {
+        if *etag != context.etag {
+            return (
+                StatusCode::PRECONDITION_FAILED,
+                Json(ProblemDetails::new(
+                    412,
+                    "ETag mismatch - context has been modified".to_string(),
+                )),
+            )
+                .into_response();
+        }
+    }
 
     if let Err(e) = state.db.delete_ue_context(&supi).await {
         return (
@@ -39,6 +59,8 @@ pub async fn deactivate_sms_service(
         )
             .into_response();
     }
+
+    state.context_store.remove(&supi);
 
     info!("SMS service deactivated for SUPI: {}", supi);
     StatusCode::NO_CONTENT.into_response()

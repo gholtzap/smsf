@@ -2,7 +2,7 @@
 
 - [x] `PUT /nsmsf-sms/v1/ue-contexts/:supi` — Activate SMS service for a UE (src/sbi/handlers/activation.rs:18)
 - [x] `PATCH /nsmsf-sms/v1/ue-contexts/:supi` — Update UE SMS context via JSON Patch (src/sbi/handlers/update.rs:17)
-- [ ] `DELETE /nsmsf-sms/v1/ue-contexts/:supi` — Deactivate SMS service for a UE (src/sbi/handlers/deactivation.rs:16)
+- [x] `DELETE /nsmsf-sms/v1/ue-contexts/:supi` — Deactivate SMS service for a UE (src/sbi/handlers/deactivation.rs:16)
 - [ ] `POST /nsmsf-sms/v1/ue-contexts/:supi/sendsms` — Receive uplink (MO) SMS from AMF (src/sbi/handlers/send_sms.rs:24)
 - [ ] `POST /nsmsf-sms/v1/ue-contexts/:supi/send-mt-sms` — Send downlink (MT) SMS to UE (src/sbi/handlers/send_mt_sms.rs:25)
 - [ ] `POST /nsmsf-sms/v1/ue-contexts/:supi/delivery-report` — Receive SMS delivery report (src/sbi/handlers/delivery_report.rs:16)
