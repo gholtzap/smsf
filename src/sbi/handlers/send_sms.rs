@@ -1,7 +1,9 @@
 use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::udm::UdmClient;
-use crate::sbi::models::{ProblemDetails, SmsRecordData};
+use crate::sbi::models::{
+    ProblemDetails, SmsDeliveryReportStatus, SmsRecordData, SmsRecordDeliveryData,
+};
 use crate::sbi::multipart::parse_multipart_sms;
 use crate::sms::tpdu::TpSubmit;
 use crate::sms::types::{SmsDeliveryStatus, SmsRecord};
@@ -10,7 +12,6 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use base64::Engine;
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -27,15 +28,18 @@ pub async fn send_uplink_sms(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if !state.context_store.contains(&supi) {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ProblemDetails::not_found(
-                "UE SMS context not found".to_string(),
-            )),
-        )
-            .into_response();
-    }
+    let context = match state.context_store.get(&supi) {
+        Some(ctx) => ctx,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ProblemDetails::not_found(
+                    "UE SMS context not found".to_string(),
+                )),
+            )
+                .into_response();
+        }
+    };
 
     match state.udm_client.get_sms_authorization(&supi).await {
         Ok(auth_data) => {
@@ -103,7 +107,7 @@ pub async fn send_uplink_sms(
             .into_response();
     }
 
-    let (_json_data, sms_payload) = match parse_multipart_sms(boundary, body).await {
+    let (json_data, sms_payload) = match parse_multipart_sms(boundary, body).await {
         Ok(data) => data,
         Err(e) => {
             error!("Failed to parse multipart SMS: {}", e);
@@ -118,7 +122,22 @@ pub async fn send_uplink_sms(
         }
     };
 
-    let sms_record_id = uuid::Uuid::new_v4().to_string();
+    let request_data: SmsRecordData = match serde_json::from_value(json_data) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Failed to deserialize SMS record data: {}", e);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ProblemDetails::bad_request(format!(
+                    "Invalid SMS record data: {}",
+                    e
+                ))),
+            )
+                .into_response();
+        }
+    };
+
+    let sms_record_id = request_data.sms_record_id;
 
     let (status_report_requested, message_reference, destination_address, validity_period) =
         match TpSubmit::decode(&sms_payload) {
@@ -134,7 +153,6 @@ pub async fn send_uplink_sms(
             }
         };
 
-    let context = state.context_store.get(&supi).unwrap();
     let now = Utc::now();
     let expires_at = validity_period
         .map(|vp| now + vp)
@@ -175,10 +193,9 @@ pub async fn send_uplink_sms(
 
     info!("Uplink SMS received from SUPI: {}", supi);
 
-    let response_data = SmsRecordData {
-        sms_record_id: sms_record_id.clone(),
-        sms_payload: base64::engine::general_purpose::STANDARD.encode(&sms_payload),
-        gpsi: context.gpsi.clone(),
+    let response_data = SmsRecordDeliveryData {
+        sms_record_id,
+        delivery_status: SmsDeliveryReportStatus::SmsfAccepted,
     };
 
     (StatusCode::OK, Json(response_data)).into_response()

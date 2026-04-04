@@ -2,7 +2,7 @@ use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
 use crate::nf_client::udm::UdmClient;
-use crate::sbi::models::{ProblemDetails, SmsRecordDeliveryData};
+use crate::sbi::models::{ProblemDetails, SmsDeliveryReportStatus, SmsRecordDeliveryData};
 use crate::sbi::multipart::parse_multipart_sms;
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::types::SmsDeliveryData;
@@ -129,6 +129,7 @@ pub async fn send_downlink_sms(
         Ok(record_id) => {
             let response_data = SmsRecordDeliveryData {
                 sms_record_id: record_id,
+                delivery_status: SmsDeliveryReportStatus::Pending,
             };
             (StatusCode::OK, Json(response_data)).into_response()
         }

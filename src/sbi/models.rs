@@ -58,18 +58,43 @@ pub struct UeSmsContextData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefToBinaryData {
+    #[serde(rename = "contentId")]
+    pub content_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmsRecordData {
     #[serde(rename = "smsRecordId")]
     pub sms_record_id: String,
     #[serde(rename = "smsPayload")]
-    pub sms_payload: String,
+    pub sms_payload: RefToBinaryData,
+    #[serde(rename = "accessType", skip_serializing_if = "Option::is_none")]
+    pub access_type: Option<AccessType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub gpsi: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pei: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SmsDeliveryReportStatus {
+    #[serde(rename = "SMS_DELIVERY_PENDING")]
+    Pending,
+    #[serde(rename = "SMS_DELIVERY_COMPLETED")]
+    Completed,
+    #[serde(rename = "SMS_DELIVERY_FAILED")]
+    Failed,
+    #[serde(rename = "SMS_DELIVERY_SMSF_ACCEPTED")]
+    SmsfAccepted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmsRecordDeliveryData {
     #[serde(rename = "smsRecordId")]
     pub sms_record_id: String,
+    #[serde(rename = "deliveryStatus")]
+    pub delivery_status: SmsDeliveryReportStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
