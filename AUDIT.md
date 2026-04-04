@@ -5,7 +5,7 @@
 - [x] `DELETE /nsmsf-sms/v1/ue-contexts/:supi` — Deactivate SMS service for a UE (src/sbi/handlers/deactivation.rs:16)
 - [x] `POST /nsmsf-sms/v1/ue-contexts/:supi/sendsms` — Receive uplink (MO) SMS from AMF (src/sbi/handlers/send_sms.rs:24)
 - [x] `POST /nsmsf-sms/v1/ue-contexts/:supi/send-mt-sms` — Send downlink (MT) SMS to UE (src/sbi/handlers/send_mt_sms.rs:25)
-- [ ] `POST /nsmsf-sms/v1/ue-contexts/:supi/delivery-report` — Receive SMS delivery report (src/sbi/handlers/delivery_report.rs:16)
+- [x] `POST /nsmsf-sms/v1/ue-contexts/:supi/delivery-report` — Receive SMS delivery report (src/sbi/handlers/delivery_report.rs:16)
 - [ ] `GET /health` — Health check endpoint (src/sbi/server.rs:100)
 
 ## Middleware

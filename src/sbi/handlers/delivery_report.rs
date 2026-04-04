@@ -18,8 +18,8 @@ pub async fn receive_delivery_report(
     Path(supi): Path<String>,
     Json(report): Json<SmsDeliveryReportData>,
 ) -> Response {
-    match state.db.get_sms_record(&report.sms_record_id).await {
-        Ok(Some(_)) => {},
+    let record = match state.db.get_sms_record(&report.sms_record_id).await {
+        Ok(Some(record)) => record,
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
@@ -41,9 +41,20 @@ pub async fn receive_delivery_report(
             )
                 .into_response();
         }
+    };
+
+    if record.supi != supi {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ProblemDetails::new(
+                403,
+                "SMS record does not belong to this subscriber".to_string(),
+            )),
+        )
+            .into_response();
     }
 
-    let delivery_status = report.delivery_status.clone();
+    let delivery_status = report.delivery_status;
 
     if let Err(e) = state
         .db
@@ -61,18 +72,18 @@ pub async fn receive_delivery_report(
             .into_response();
     }
 
-    if let Err(e) = state
-        .status_report_service
-        .handle_delivery_status_change(&report.sms_record_id, delivery_status.clone())
-        .await
-    {
-        error!("Failed to send status report: {}", e);
-    }
-
     info!(
         "Delivery report received for SUPI: {}, SMS record: {}, status: {:?}",
         supi, report.sms_record_id, delivery_status
     );
+
+    if let Err(e) = state
+        .status_report_service
+        .handle_delivery_status_change(&report.sms_record_id, delivery_status)
+        .await
+    {
+        error!("Failed to send status report: {}", e);
+    }
 
     StatusCode::NO_CONTENT.into_response()
 }
