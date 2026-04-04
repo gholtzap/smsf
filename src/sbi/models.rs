@@ -90,6 +90,12 @@ pub enum SmsDeliveryReportStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MtSmsRequestData {
+    #[serde(rename = "smsPayload")]
+    pub sms_payload: RefToBinaryData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmsRecordDeliveryData {
     #[serde(rename = "smsRecordId")]
     pub sms_record_id: String,

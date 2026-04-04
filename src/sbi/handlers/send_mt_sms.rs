@@ -2,7 +2,7 @@ use crate::context::ue_sms_context::UeSmsContextStore;
 use crate::db::Database;
 use crate::nf_client::amf::AmfClient;
 use crate::nf_client::udm::UdmClient;
-use crate::sbi::models::{ProblemDetails, SmsDeliveryReportStatus, SmsRecordDeliveryData};
+use crate::sbi::models::{MtSmsRequestData, ProblemDetails, SmsDeliveryReportStatus, SmsRecordDeliveryData};
 use crate::sbi::multipart::parse_multipart_sms;
 use crate::sms::delivery::SmsDeliveryService;
 use crate::sms::types::SmsDeliveryData;
@@ -92,6 +92,7 @@ pub async fn send_downlink_sms(
         .split("boundary=")
         .nth(1)
         .and_then(|b| b.split(';').next())
+        .map(|b| b.trim().trim_matches('"'))
         .unwrap_or("");
 
     if boundary.is_empty() {
@@ -104,7 +105,7 @@ pub async fn send_downlink_sms(
             .into_response();
     }
 
-    let (_json_data, sms_payload) = match parse_multipart_sms(boundary, body).await {
+    let (json_data, sms_payload) = match parse_multipart_sms(boundary, body).await {
         Ok(data) => data,
         Err(e) => {
             error!("Failed to parse multipart SMS: {}", e);
@@ -112,6 +113,21 @@ pub async fn send_downlink_sms(
                 StatusCode::BAD_REQUEST,
                 Json(ProblemDetails::bad_request(format!(
                     "Failed to parse multipart: {}",
+                    e
+                ))),
+            )
+                .into_response();
+        }
+    };
+
+    let _request_data: MtSmsRequestData = match serde_json::from_value(json_data) {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Failed to deserialize MT SMS request data: {}", e);
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ProblemDetails::bad_request(format!(
+                    "Invalid MT SMS request data: {}",
                     e
                 ))),
             )
@@ -129,7 +145,7 @@ pub async fn send_downlink_sms(
         Ok(record_id) => {
             let response_data = SmsRecordDeliveryData {
                 sms_record_id: record_id,
-                delivery_status: SmsDeliveryReportStatus::Pending,
+                delivery_status: SmsDeliveryReportStatus::SmsfAccepted,
             };
             (StatusCode::OK, Json(response_data)).into_response()
         }

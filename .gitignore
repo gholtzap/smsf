@@ -4,3 +4,6 @@
 target/
 config.json
 Cargo.lock
+AUDIT.md
+IMPLEMENT.md
+CLAUDE.md
