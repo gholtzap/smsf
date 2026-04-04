@@ -124,6 +124,34 @@ pub struct SearchResult {
     pub num_nf_inst_complete: Option<u32>,
 }
 
+impl std::fmt::Display for NfType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NfType::Nrf => write!(f, "NRF"),
+            NfType::Udm => write!(f, "UDM"),
+            NfType::Amf => write!(f, "AMF"),
+            NfType::Smf => write!(f, "SMF"),
+            NfType::Ausf => write!(f, "AUSF"),
+            NfType::Nef => write!(f, "NEF"),
+            NfType::Pcf => write!(f, "PCF"),
+            NfType::Smsf => write!(f, "SMSF"),
+            NfType::Nssf => write!(f, "NSSF"),
+            NfType::Udr => write!(f, "UDR"),
+            NfType::Lmf => write!(f, "LMF"),
+            NfType::Gmlc => write!(f, "GMLC"),
+            NfType::FiveGEir => write!(f, "5G_EIR"),
+            NfType::Sepp => write!(f, "SEPP"),
+            NfType::Upf => write!(f, "UPF"),
+            NfType::N3iwf => write!(f, "N3IWF"),
+            NfType::Af => write!(f, "AF"),
+            NfType::Udsf => write!(f, "UDSF"),
+            NfType::Bsf => write!(f, "BSF"),
+            NfType::Chf => write!(f, "CHF"),
+            NfType::Nwdaf => write!(f, "NWDAF"),
+        }
+    }
+}
+
 pub type QueryParams = HashMap<String, String>;
 
 pub struct NrfClient {
@@ -135,31 +163,33 @@ pub struct NrfClient {
 }
 
 impl NrfClient {
-    pub fn new(nrf_uri: String, nf_instance_id: String, tls_config: Option<&TlsConfig>) -> Self {
-        let use_tls = tls_config.map_or(false, |c| c.enabled);
-
+    pub fn new(nrf_uri: String, nf_instance_id: String, tls_config: Option<&TlsConfig>) -> Result<Self> {
+        let mut use_tls = false;
         let mut client_builder = Client::builder().timeout(std::time::Duration::from_secs(30));
 
         if let Some(tls_cfg) = tls_config {
             if tls_cfg.enabled {
-                if let Ok(rustls_config) = crate::tls::build_client_config(tls_cfg) {
-                    client_builder = client_builder
-                        .use_preconfigured_tls(rustls_config)
-                        .https_only(true);
-                    info!("NRF client configured with TLS support");
-                } else {
-                    error!("Failed to build TLS config for NRF client, falling back to HTTP");
-                }
+                let rustls_config = crate::tls::build_client_config(tls_cfg)
+                    .context("Failed to build TLS config for NRF client")?;
+                client_builder = client_builder
+                    .use_preconfigured_tls(rustls_config)
+                    .https_only(true);
+                use_tls = true;
+                info!("NRF client configured with TLS support");
             }
         }
 
-        Self {
-            client: client_builder.build().unwrap_or_else(|_| Client::new()),
+        let client = client_builder
+            .build()
+            .context("Failed to build NRF HTTP client")?;
+
+        Ok(Self {
+            client,
             nrf_uri,
             nf_instance_id,
             profile: Arc::new(RwLock::new(None)),
             use_tls,
-        }
+        })
     }
 
     pub fn build_smsf_profile(&self, smsf_host: &str, smsf_port: u16) -> NFProfile {
@@ -309,20 +339,21 @@ impl NrfClient {
         target_nf_type: NfType,
         query_params: Option<QueryParams>,
     ) -> Result<SearchResult> {
-        let mut url = format!(
-            "{}/nnrf-disc/v1/nf-instances?target-nf-type={:?}",
-            self.nrf_uri, target_nf_type
-        );
+        let url = format!("{}/nnrf-disc/v1/nf-instances", self.nrf_uri);
 
-        if let Some(params) = query_params {
-            for (key, value) in params {
-                url.push_str(&format!("&{}={}", key, value));
-            }
+        let mut params: Vec<(String, String)> = vec![
+            ("target-nf-type".to_string(), target_nf_type.to_string()),
+            ("requester-nf-type".to_string(), NfType::Smsf.to_string()),
+        ];
+
+        if let Some(extra) = query_params {
+            params.extend(extra);
         }
 
         let response = self
             .client
             .get(&url)
+            .query(&params)
             .send()
             .await
             .context("Failed to send discovery request to NRF")?;

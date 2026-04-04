@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
         config.nrf_uri.clone(),
         config.nf_instance_id.clone(),
         Some(&config.tls),
-    ));
+    )?);
 
     let profile = nrf_client.build_smsf_profile(&config.smsf_host, config.sbi_bind_port);
     nrf_client.register(profile).await?;

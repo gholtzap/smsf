@@ -18,13 +18,13 @@
 
 ## NF Client Operations — NRF
 
-- [ ] `NrfClient::new` — Create NRF client with optional TLS (src/nf_client/nrf.rs:138)
-- [ ] `NrfClient::build_smsf_profile` — Build NF profile for SMSF registration (src/nf_client/nrf.rs:165)
-- [ ] `NrfClient::register` — Register SMSF with NRF (src/nf_client/nrf.rs:208)
-- [ ] `NrfClient::deregister` — Deregister SMSF from NRF (src/nf_client/nrf.rs:246)
-- [ ] `NrfClient::heartbeat` — Send heartbeat to NRF (src/nf_client/nrf.rs:278)
-- [ ] `NrfClient::discover` — Discover NF instances via NRF (src/nf_client/nrf.rs:307)
-- [ ] `NrfClient::start_heartbeat_task` — Background heartbeat with auto re-registration (src/nf_client/nrf.rs:362)
+- [x] `NrfClient::new` — Create NRF client with optional TLS (src/nf_client/nrf.rs:138)
+- [x] `NrfClient::build_smsf_profile` — Build NF profile for SMSF registration (src/nf_client/nrf.rs:165)
+- [x] `NrfClient::register` — Register SMSF with NRF (src/nf_client/nrf.rs:208)
+- [x] `NrfClient::deregister` — Deregister SMSF from NRF (src/nf_client/nrf.rs:246)
+- [x] `NrfClient::heartbeat` — Send heartbeat to NRF (src/nf_client/nrf.rs:278)
+- [x] `NrfClient::discover` — Discover NF instances via NRF (src/nf_client/nrf.rs:307)
+- [x] `NrfClient::start_heartbeat_task` — Background heartbeat with auto re-registration (src/nf_client/nrf.rs:362)
 
 ## NF Client Operations — AMF
 
