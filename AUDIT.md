@@ -28,7 +28,7 @@
 
 ## NF Client Operations — AMF
 
-- [ ] `AmfClient::new` / `AmfClient::with_nrf` — Create AMF client (src/nf_client/amf.rs:67)
+- [x] `AmfClient::new` / `AmfClient::with_nrf` — Create AMF client (src/nf_client/amf.rs:67)
 - [ ] `AmfClient::discover_amf` — Discover AMF via NRF (src/nf_client/amf.rs:102)
 - [ ] `AmfClient::check_ue_reachability` — Check UE CM state at AMF (src/nf_client/amf.rs:154)
 - [ ] `AmfClient::send_n1n2_message` — Send N1N2 message transfer to AMF (src/nf_client/amf.rs:192)

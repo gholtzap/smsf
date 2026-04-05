@@ -3,7 +3,7 @@ use base64::Engine;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use super::nrf::{NfType, NrfClient};
 use crate::config::TlsConfig;
@@ -64,39 +64,39 @@ pub struct AmfClient {
 }
 
 impl AmfClient {
-    pub fn new(tls_config: Option<&TlsConfig>) -> Self {
-        let client = Self::build_client(tls_config);
-        Self {
+    pub fn new(tls_config: Option<&TlsConfig>) -> Result<Self> {
+        let client = Self::build_client(tls_config)?;
+        Ok(Self {
             client,
             nrf_client: None,
-        }
+        })
     }
 
-    pub fn with_nrf(nrf_client: Arc<NrfClient>, tls_config: Option<&TlsConfig>) -> Self {
-        let client = Self::build_client(tls_config);
-        Self {
+    pub fn with_nrf(nrf_client: Arc<NrfClient>, tls_config: Option<&TlsConfig>) -> Result<Self> {
+        let client = Self::build_client(tls_config)?;
+        Ok(Self {
             client,
             nrf_client: Some(nrf_client),
-        }
+        })
     }
 
-    fn build_client(tls_config: Option<&TlsConfig>) -> Client {
+    fn build_client(tls_config: Option<&TlsConfig>) -> Result<Client> {
         let mut client_builder = Client::builder().timeout(std::time::Duration::from_secs(30));
 
         if let Some(tls_cfg) = tls_config {
             if tls_cfg.enabled {
-                if let Ok(rustls_config) = crate::tls::build_client_config(tls_cfg) {
-                    client_builder = client_builder
-                        .use_preconfigured_tls(rustls_config)
-                        .https_only(true);
-                    info!("AMF client configured with TLS support");
-                } else {
-                    error!("Failed to build TLS config for AMF client, falling back to HTTP");
-                }
+                let rustls_config = crate::tls::build_client_config(tls_cfg)
+                    .context("Failed to build TLS config for AMF client")?;
+                client_builder = client_builder
+                    .use_preconfigured_tls(rustls_config)
+                    .https_only(true);
+                info!("AMF client configured with TLS support");
             }
         }
 
-        client_builder.build().unwrap_or_else(|_| Client::new())
+        client_builder
+            .build()
+            .context("Failed to build AMF HTTP client")
     }
 
     pub async fn discover_amf(

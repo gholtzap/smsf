@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
 
     let udm_client = UdmClient::with_nrf(nrf_client.clone(), Some(config.udm_uri.clone()), Some(&config.tls));
 
-    let amf_client = AmfClient::with_nrf(nrf_client.clone(), Some(&config.tls));
+    let amf_client = AmfClient::with_nrf(nrf_client.clone(), Some(&config.tls))?;
 
     let nrf_client_clone = nrf_client.clone();
     let smsf_host = config.smsf_host.clone();
