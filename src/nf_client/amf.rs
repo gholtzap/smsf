@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use super::nrf::{NfType, NrfClient};
+use super::nrf::{NfServiceStatus, NfType, NrfClient};
 use crate::config::TlsConfig;
 use crate::sbi::models::{Guami, UserLocation};
 
@@ -112,10 +113,9 @@ impl AmfClient {
         let mut query_params = std::collections::HashMap::new();
 
         if let Some(guami) = guami {
-            query_params.insert(
-                "guami".to_string(),
-                serde_json::to_string(&guami).unwrap_or_default(),
-            );
+            let guami_str = serde_json::to_string(&guami)
+                .context("Failed to serialize GUAMI for NRF discovery")?;
+            query_params.insert("guami".to_string(), guami_str);
         }
 
         let search_result = nrf_client
@@ -127,11 +127,23 @@ impl AmfClient {
             return Err(anyhow::anyhow!("No AMF instances found"));
         }
 
-        let amf_instance = &search_result.nf_instances[0];
+        let amf_instance = search_result
+            .nf_instances
+            .iter()
+            .min_by_key(|inst| {
+                (
+                    inst.priority.unwrap_or(u16::MAX),
+                    Reverse(inst.capacity.unwrap_or(0)),
+                    inst.load.unwrap_or(u16::MAX),
+                )
+            })
+            .ok_or_else(|| anyhow::anyhow!("No valid AMF instance found"))?;
 
         if let Some(ref services) = amf_instance.nf_services {
             for service in services {
-                if service.service_name == "namf-comm" {
+                if service.service_name == "namf-comm"
+                    && service.nf_service_status == NfServiceStatus::Registered
+                {
                     if let Some(ref api_prefix) = service.api_prefix {
                         info!("Discovered AMF at {}", api_prefix);
                         return Ok(api_prefix.clone());
